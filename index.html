@@ -115,8 +115,8 @@
   // CONFIGURACIÓN — rellena estos dos valores con los tuyos.
   // Los obtienes al desplegar el Apps Script (ver README.md).
   // ============================================================
-  var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyaRn-DTmBnOXcGTx5cDlKojEGe57CO7lUYmc0kiQafFftxFDcCx20JYr5UTYLPupbX/exec'; // termina en /exec
-  var TOKEN = '275488'; // debe coincidir con el TOKEN del Code.gs
+  var APPS_SCRIPT_URL = 'PEGA_AQUI_LA_URL_DE_TU_APPS_SCRIPT'; // termina en /exec
+  var TOKEN = 'CAMBIA-ESTA-CLAVE-SECRETA-2026'; // debe coincidir con el TOKEN del Code.gs
   // ============================================================
 
   var qInput = document.getElementById('q');
@@ -167,7 +167,9 @@
           '<div class="estado ' + clase + '">' + escapeHtml(r.estado_simple) + '</div>' +
           '<div class="detalle">' +
           (r.averia ? '<div class="fila"><b>Avería:</b> ' + escapeHtml(r.averia) + '</div>' : '') +
-          (r.reparacion ? '<div class="fila"><b>Reparación:</b> ' + escapeHtml(r.reparacion) + '</div>' : '') +
+          (r.reparacion ? '<div class="fila"><b>Reparación / envíos:</b> ' + escapeHtml(r.reparacion) + '</div>' : '') +
+          (r.fecha_cita ? '<div class="fila"><b>Próxima cita:</b> ' + escapeHtml(r.fecha_cita) + '</div>' : '') +
+          (r.importe ? '<div class="fila"><b>Importe:</b> ' + escapeHtml(r.importe) + '</div>' : '') +
           (r.abierto ? '<div class="fila"><b>Fecha de entrada:</b> ' + escapeHtml(r.abierto) + '</div>' : '') +
           (r.cerrado ? '<div class="fila"><b>Fecha de cierre:</b> ' + escapeHtml(r.cerrado) + '</div>' : '') +
           (r.entregado ? '<div class="fila"><b>Fecha de entrega:</b> ' + escapeHtml(r.entregado) + '</div>' : '') +
