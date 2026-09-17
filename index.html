@@ -115,8 +115,8 @@
   // CONFIGURACIÓN — rellena estos dos valores con los tuyos.
   // Los obtienes al desplegar el Apps Script (ver README.md).
   // ============================================================
-  var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyaRn-DTmBnOXcGTx5cDlKojEGe57CO7lUYmc0kiQafFftxFDcCx20JYr5UTYLPupbX/exec'; // termina en /exec
-  var TOKEN = '275488'; // debe coincidir con el TOKEN del Code.gs
+  var APPS_SCRIPT_URL = 'PEGA_AQUI_LA_URL_DE_TU_APPS_SCRIPT'; // termina en /exec
+  var TOKEN = 'CAMBIA-ESTA-CLAVE-SECRETA-2026'; // debe coincidir con el TOKEN del Code.gs
   // ============================================================
 
   var qInput = document.getElementById('q');
@@ -181,6 +181,47 @@
       .join('');
   }
 
+  // Llamamos al Apps Script con JSONP (una etiqueta <script>) en lugar de
+  // fetch(), porque así evitamos por completo los bloqueos de CORS que
+  // Google Apps Script suele provocar al llamarlo desde otro dominio
+  // (como GitHub Pages).
+  var jsonpContador = 0;
+
+  function llamarJSONP(url, onOk, onError) {
+    var nombreCallback = 'jsonpCallback_' + Date.now() + '_' + (jsonpContador++);
+    var script = document.createElement('script');
+    var limpiado = false;
+
+    var timeout = setTimeout(function () {
+      if (limpiado) return;
+      limpiado = true;
+      delete window[nombreCallback];
+      script.remove();
+      onError(new Error('Tiempo de espera agotado (revisa la URL de Apps Script)'));
+    }, 15000);
+
+    window[nombreCallback] = function (data) {
+      if (limpiado) return;
+      limpiado = true;
+      clearTimeout(timeout);
+      delete window[nombreCallback];
+      script.remove();
+      onOk(data);
+    };
+
+    script.onerror = function () {
+      if (limpiado) return;
+      limpiado = true;
+      clearTimeout(timeout);
+      delete window[nombreCallback];
+      script.remove();
+      onError(new Error('No se pudo cargar la URL de Apps Script'));
+    };
+
+    script.src = url + '&callback=' + nombreCallback;
+    document.body.appendChild(script);
+  }
+
   function buscar() {
     var q = qInput.value.trim();
     if (!q) return;
@@ -190,23 +231,24 @@
 
     var url = APPS_SCRIPT_URL + '?token=' + encodeURIComponent(TOKEN) + '&q=' + encodeURIComponent(q);
 
-    fetch(url)
-      .then(function (resp) { return resp.json(); })
-      .then(function (data) {
+    llamarJSONP(
+      url,
+      function (data) {
         btn.disabled = false;
         if (!data.ok) {
           resultadosDiv.innerHTML = '<p class="mensaje">Error: ' + escapeHtml(data.error || 'desconocido') + '</p>';
           return;
         }
         renderResultados(data.resultados);
-      })
-      .catch(function (err) {
+      },
+      function (err) {
         btn.disabled = false;
         resultadosDiv.innerHTML =
           '<p class="mensaje">No se pudo conectar con la hoja de cálculo. Revisa que la URL de Apps Script sea correcta y que esté desplegada como "Cualquier usuario". (' +
           escapeHtml(err.message) +
           ')</p>';
-      });
+      }
+    );
   }
 
   btn.addEventListener('click', buscar);
