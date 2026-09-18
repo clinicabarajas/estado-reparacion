@@ -25,11 +25,11 @@
   }
   .contenedor { max-width: 720px; margin: 0 auto; }
   h1 { font-size: 1.4rem; margin-bottom: 4px; }
-  p.subtitulo { color: var(--gris); margin-top: 0; margin-bottom: 24px; font-size: 0.95rem; }
+  p.subtitulo { color: var(--gris); margin-top: 0; margin-bottom: 20px; font-size: 0.95rem; }
   .buscador {
     display: flex;
     gap: 8px;
-    margin-bottom: 20px;
+    margin-bottom: 6px;
   }
   input[type="text"] {
     flex: 1;
@@ -51,11 +51,62 @@
   }
   button:hover { background: var(--azul-osc); }
   button:disabled { opacity: 0.6; cursor: default; }
+  button.secundario {
+    background: #e2e8f0;
+    color: #334155;
+  }
+  button.secundario:hover { background: #cbd5e1; }
+  .contador {
+    font-size: 0.82rem;
+    color: var(--gris);
+    margin: 0 0 10px 2px;
+  }
   .mensaje {
     text-align: center;
     color: var(--gris);
     padding: 20px 0;
   }
+
+  /* Lista con scroll */
+  .lista {
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    max-height: 340px;
+    overflow-y: auto;
+    margin-bottom: 20px;
+  }
+  .item-lista {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #eef2f7;
+    cursor: pointer;
+  }
+  .item-lista:last-child { border-bottom: none; }
+  .item-lista:hover { background: #f8fafc; }
+  .item-lista.seleccionado { background: #eff6ff; }
+  .item-lista .info { min-width: 0; }
+  .item-lista .info .nombre {
+    font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .item-lista .info .np-mini { font-size: 0.78rem; color: var(--gris); }
+  .chip {
+    flex-shrink: 0;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* Tarjeta de detalle */
   .card {
     background: var(--card);
     border-radius: 14px;
@@ -76,11 +127,11 @@
     font-weight: 600;
     margin-bottom: 12px;
   }
-  .estado.entregada { background: #dcfce7; color: var(--verde); }
-  .estado.terminada { background: #dbeafe; color: var(--azul-osc); }
-  .estado.taller { background: #ffedd5; color: var(--naranja); }
-  .estado.proceso { background: #fef9c3; color: #a16207; }
-  .estado.sin-info { background: #f1f5f9; color: var(--gris); }
+  .estado.entregada, .chip.entregada { background: #dcfce7; color: var(--verde); }
+  .estado.terminada, .chip.terminada { background: #dbeafe; color: var(--azul-osc); }
+  .estado.taller, .chip.taller { background: #ffedd5; color: var(--naranja); }
+  .estado.proceso, .chip.proceso { background: #fef9c3; color: #a16207; }
+  .estado.sin-info, .chip.sin-info { background: #f1f5f9; color: var(--gris); }
   .detalle { font-size: 0.92rem; line-height: 1.5; }
   .detalle b { color: #334155; }
   .fila { margin-bottom: 4px; }
@@ -98,16 +149,19 @@
 <body>
   <div class="contenedor">
     <h1>Estado de Reparación</h1>
-    <p class="subtitulo">Busca por número de paciente (NP), nombre o apellidos.</p>
+    <p class="subtitulo">Busca por número de paciente (NP), nombre o apellidos, o elige una de la lista.</p>
 
     <div id="config"></div>
 
     <div class="buscador">
       <input type="text" id="q" placeholder="Ej: 45344 o Bonilla" autofocus />
-      <button id="btnBuscar">Buscar</button>
+      <button id="btnActualizar" class="secundario" title="Recargar datos de la hoja">↻</button>
     </div>
+    <p class="contador" id="contador"></p>
 
-    <div id="resultados"></div>
+    <div class="lista" id="lista"></div>
+
+    <div id="detalle"></div>
   </div>
 
 <script>
@@ -120,9 +174,14 @@
   // ============================================================
 
   var qInput = document.getElementById('q');
-  var btn = document.getElementById('btnBuscar');
-  var resultadosDiv = document.getElementById('resultados');
+  var btnActualizar = document.getElementById('btnActualizar');
+  var listaDiv = document.getElementById('lista');
+  var detalleDiv = document.getElementById('detalle');
+  var contadorP = document.getElementById('contador');
   var configDiv = document.getElementById('config');
+
+  var todosLosRegistros = [];
+  var npSeleccionado = null;
 
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PEGA_AQUI') > -1) {
     configDiv.style.display = 'block';
@@ -137,8 +196,8 @@
     estado = estado.toLowerCase();
     if (estado.indexOf('entregada') > -1) return 'entregada';
     if (estado.indexOf('terminada') > -1) return 'terminada';
-    if (estado.indexOf('taller') > -1 || estado.indexOf('fabricante') > -1) return 'taller';
-    if (estado.indexOf('proceso') > -1) return 'proceso';
+    if (estado.indexOf('taller') > -1 || estado.indexOf('fabricante') > -1 || estado.indexOf('espera') > -1) return 'taller';
+    if (estado.indexOf('proceso') > -1 || estado.indexOf('cita') > -1 || estado.indexOf('pendiente') > -1) return 'proceso';
     return 'sin-info';
   }
 
@@ -151,40 +210,75 @@
       .replace(/>/g, '&gt;');
   }
 
-  function renderResultados(lista) {
+  // ---------- Lista con scroll ----------
+
+  function renderLista(lista) {
+    contadorP.textContent = lista.length + (lista.length === 1 ? ' reparación' : ' reparaciones');
+
     if (!lista.length) {
-      resultadosDiv.innerHTML = '<p class="mensaje">No se ha encontrado ninguna reparación con ese dato.</p>';
+      listaDiv.innerHTML = '<p class="mensaje">No se ha encontrado ninguna reparación con ese dato.</p>';
       return;
     }
 
-    resultadosDiv.innerHTML = lista
+    listaDiv.innerHTML = lista
       .map(function (r) {
         var clase = estadoClase(r.estado_simple);
+        var seleccionada = r.np === npSeleccionado ? ' seleccionado' : '';
         return (
-          '<div class="card">' +
-          '<h2>' + escapeHtml(r.nombre) + ' ' + escapeHtml(r.apellidos) + '</h2>' +
-          '<div class="np">NP: ' + escapeHtml(r.np) + '</div>' +
-          '<div class="estado ' + clase + '">' + escapeHtml(r.estado_simple) + '</div>' +
-          '<div class="detalle">' +
-          (r.averia ? '<div class="fila"><b>Avería:</b> ' + escapeHtml(r.averia) + '</div>' : '') +
-          (r.reparacion ? '<div class="fila"><b>Reparación / envíos:</b> ' + escapeHtml(r.reparacion) + '</div>' : '') +
-          (r.fecha_cita ? '<div class="fila"><b>Próxima cita:</b> ' + escapeHtml(r.fecha_cita) + '</div>' : '') +
-          (r.importe ? '<div class="fila"><b>Importe:</b> ' + escapeHtml(r.importe) + '</div>' : '') +
-          (r.abierto ? '<div class="fila"><b>Fecha de entrada:</b> ' + escapeHtml(r.abierto) + '</div>' : '') +
-          (r.cerrado ? '<div class="fila"><b>Fecha de cierre:</b> ' + escapeHtml(r.cerrado) + '</div>' : '') +
-          (r.entregado ? '<div class="fila"><b>Fecha de entrega:</b> ' + escapeHtml(r.entregado) + '</div>' : '') +
-          (r.status ? '<div class="fila"><b>Status interno:</b> ' + escapeHtml(r.status) + '</div>' : '') +
+          '<div class="item-lista' + seleccionada + '" data-np="' + escapeHtml(r.np) + '">' +
+          '<div class="info">' +
+          '<div class="nombre">' + escapeHtml(r.nombre) + ' ' + escapeHtml(r.apellidos) + '</div>' +
+          '<div class="np-mini">NP: ' + escapeHtml(r.np) + '</div>' +
           '</div>' +
+          '<span class="chip ' + clase + '">' + escapeHtml(r.estado_simple) + '</span>' +
           '</div>'
         );
       })
       .join('');
+
+    Array.prototype.forEach.call(listaDiv.querySelectorAll('.item-lista'), function (el) {
+      el.addEventListener('click', function () {
+        seleccionar(el.getAttribute('data-np'), lista);
+      });
+    });
   }
 
-  // Llamamos al Apps Script con JSONP (una etiqueta <script>) en lugar de
-  // fetch(), porque así evitamos por completo los bloqueos de CORS que
-  // Google Apps Script suele provocar al llamarlo desde otro dominio
-  // (como GitHub Pages).
+  function seleccionar(np, listaVisible) {
+    npSeleccionado = np;
+    // marcar visualmente la fila seleccionada sin volver a pedir datos
+    Array.prototype.forEach.call(listaDiv.querySelectorAll('.item-lista'), function (el) {
+      el.classList.toggle('seleccionado', el.getAttribute('data-np') === np);
+    });
+    var registro = (listaVisible || todosLosRegistros).filter(function (r) { return r.np === np; })[0];
+    if (registro) renderDetalle(registro);
+  }
+
+  function renderDetalle(r) {
+    var clase = estadoClase(r.estado_simple);
+    detalleDiv.innerHTML =
+      '<div class="card">' +
+      '<h2>' + escapeHtml(r.nombre) + ' ' + escapeHtml(r.apellidos) + '</h2>' +
+      '<div class="np">NP: ' + escapeHtml(r.np) + '</div>' +
+      '<div class="estado ' + clase + '">' + escapeHtml(r.estado_simple) + '</div>' +
+      '<div class="detalle">' +
+      (r.averia ? '<div class="fila"><b>Avería:</b> ' + escapeHtml(r.averia) + '</div>' : '') +
+      (r.reparacion ? '<div class="fila"><b>Reparación / envíos:</b> ' + escapeHtml(r.reparacion) + '</div>' : '') +
+      (r.fecha_cita ? '<div class="fila"><b>Próxima cita:</b> ' + escapeHtml(r.fecha_cita) + '</div>' : '') +
+      (r.importe ? '<div class="fila"><b>Importe:</b> ' + escapeHtml(r.importe) + '</div>' : '') +
+      (r.abierto ? '<div class="fila"><b>Fecha de entrada:</b> ' + escapeHtml(r.abierto) + '</div>' : '') +
+      (r.cerrado ? '<div class="fila"><b>Fecha de cierre:</b> ' + escapeHtml(r.cerrado) + '</div>' : '') +
+      (r.entregado ? '<div class="fila"><b>Fecha de entrega:</b> ' + escapeHtml(r.entregado) + '</div>' : '') +
+      '<div class="fila"><b>Fecha de recogida:</b> ' + (r.recogido ? escapeHtml(r.recogido) : '—') + '</div>' +
+      '<div class="fila"><b>Tiempo de espera:</b> ' + (r.espera ? escapeHtml(r.espera) + ' días' : '—') + '</div>' +
+      (r.status ? '<div class="fila"><b>Status interno:</b> ' + escapeHtml(r.status) + '</div>' : '') +
+      '</div>' +
+      '</div>';
+
+    detalleDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ---------- Conexión con Apps Script (JSONP, sin problemas de CORS) ----------
+
   var jsonpContador = 0;
 
   function llamarJSONP(url, onOk, onError) {
@@ -222,39 +316,63 @@
     document.body.appendChild(script);
   }
 
-  function buscar() {
-    var q = qInput.value.trim();
-    if (!q) return;
+  function mostrarError(err) {
+    listaDiv.innerHTML =
+      '<p class="mensaje">No se pudo conectar con la hoja de cálculo. Revisa que la URL de Apps Script sea correcta y que esté desplegada como "Cualquier usuario". (' +
+      escapeHtml(err.message) +
+      ')</p>';
+    contadorP.textContent = '';
+  }
 
-    btn.disabled = true;
-    resultadosDiv.innerHTML = '<p class="mensaje">Buscando...</p>';
-
-    var url = APPS_SCRIPT_URL + '?token=' + encodeURIComponent(TOKEN) + '&q=' + encodeURIComponent(q);
+  function cargarTodo() {
+    listaDiv.innerHTML = '<p class="mensaje">Cargando reparaciones...</p>';
+    contadorP.textContent = '';
+    var url = APPS_SCRIPT_URL + '?token=' + encodeURIComponent(TOKEN) + '&q=';
 
     llamarJSONP(
       url,
       function (data) {
-        btn.disabled = false;
         if (!data.ok) {
-          resultadosDiv.innerHTML = '<p class="mensaje">Error: ' + escapeHtml(data.error || 'desconocido') + '</p>';
+          listaDiv.innerHTML = '<p class="mensaje">Error: ' + escapeHtml(data.error || 'desconocido') + '</p>';
+          contadorP.textContent = '';
           return;
         }
-        renderResultados(data.resultados);
+        todosLosRegistros = data.resultados || [];
+        aplicarFiltro();
       },
-      function (err) {
-        btn.disabled = false;
-        resultadosDiv.innerHTML =
-          '<p class="mensaje">No se pudo conectar con la hoja de cálculo. Revisa que la URL de Apps Script sea correcta y que esté desplegada como "Cualquier usuario". (' +
-          escapeHtml(err.message) +
-          ')</p>';
-      }
+      mostrarError
     );
   }
 
-  btn.addEventListener('click', buscar);
+  // Filtra en el propio navegador la lista ya cargada (respuesta instantánea
+  // mientras se escribe, sin tener que volver a llamar a Google cada vez).
+  function aplicarFiltro() {
+    var q = qInput.value.trim().toUpperCase();
+    var filtrados = !q
+      ? todosLosRegistros
+      : todosLosRegistros.filter(function (r) {
+          return (
+            (r.np && r.np.toUpperCase().indexOf(q) > -1) ||
+            (r.nombre && r.nombre.toUpperCase().indexOf(q) > -1) ||
+            (r.apellidos && r.apellidos.toUpperCase().indexOf(q) > -1)
+          );
+        });
+    renderLista(filtrados);
+
+    // Si la selección actual ya no está en la lista filtrada, ocultamos el detalle
+    if (npSeleccionado && !filtrados.some(function (r) { return r.np === npSeleccionado; })) {
+      detalleDiv.innerHTML = '';
+      npSeleccionado = null;
+    }
+  }
+
+  qInput.addEventListener('input', aplicarFiltro);
   qInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') buscar();
+    if (e.key === 'Enter') aplicarFiltro();
   });
+  btnActualizar.addEventListener('click', cargarTodo);
+
+  cargarTodo();
 </script>
 </body>
 </html>
